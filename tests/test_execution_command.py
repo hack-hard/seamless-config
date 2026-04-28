@@ -191,6 +191,38 @@ def test_record_command_sets_strict_mode(monkeypatch, tmp_path):
     assert select.get_record() is True
 
 
+def test_select_record_invalidates_record_mode_cache(monkeypatch):
+    _reset_state(monkeypatch)
+    from seamless_transformer.record_runtime import (
+        get_record_mode,
+        invalidate_record_mode_cache,
+    )
+
+    invalidate_record_mode_cache()
+    assert get_record_mode() is False
+
+    select.select_record(True)
+
+    assert get_record_mode() is True
+
+
+def test_reset_record_before_load_invalidates_record_mode_cache(monkeypatch):
+    _reset_state(monkeypatch)
+    from seamless_transformer.record_runtime import (
+        get_record_mode,
+        invalidate_record_mode_cache,
+    )
+
+    invalidate_record_mode_cache()
+    select.select_record(True, source="command")
+    assert get_record_mode() is True
+
+    select.reset_record_before_load()
+
+    assert select.get_record() is False
+    assert get_record_mode() is False
+
+
 def test_explicit_persistent_true_without_cluster_errors(monkeypatch, tmp_path):
     _reset_state(monkeypatch)
     workdir = tmp_path / "persistent-without-cluster"

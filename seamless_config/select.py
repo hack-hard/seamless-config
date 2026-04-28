@@ -110,6 +110,12 @@ def select_record(record: bool, *, source: str = "manual") -> None:
     _record_source = source
     if source == "command":
         _record_command_seen = True
+    try:
+        from seamless_transformer.record_runtime import invalidate_record_mode_cache
+
+        invalidate_record_mode_cache()
+    except Exception:
+        pass
 
 
 def select_queue(queue: str, *, source: str = "manual") -> None:
@@ -309,6 +315,12 @@ def reset_record_before_load() -> None:
     if _record_source == "command":
         _record_source = None
         _current_record = False
+    try:
+        from seamless_transformer.record_runtime import invalidate_record_mode_cache
+
+        invalidate_record_mode_cache()
+    except Exception:
+        pass
 
 
 def reset_node_before_load() -> None:
