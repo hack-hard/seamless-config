@@ -209,6 +209,7 @@ def configure_jobserver(
     frontend_name=None,
 ):
     from .extern_clients import collect_remote_clients
+    from .select import get_record
 
     dummy_mode = "rw"  # not used for this tool
     clus, frontend, injected = _prepare_tool(
@@ -236,6 +237,7 @@ def configure_jobserver(
     added["port_end"] = frontend.jobserver.port_end
 
     remote_client_parameters = collect_remote_clients(clus.name)
+    remote_client_parameters["record"] = get_record()
     added["file_parameters"] = remote_client_parameters
 
     return _configure_tool("jobserver", added=added, injected=injected)
@@ -252,7 +254,7 @@ def configure_daskserver(
 ):
     dummy_mode = "rw"  # not used for this tool
     from . import ConfigurationError
-    from .select import get_node, get_queue
+    from .select import get_node, get_queue, get_record
 
     clus, frontend, injected = _prepare_tool(
         "daskserver",
@@ -395,6 +397,7 @@ def configure_daskserver(
     # TODO: params["transformation_throttle"] = ...
 
     params["extra_dask_config"] = queue.extra_dask_config
+    params["record"] = get_record()
 
     params = {k: v for k, v in params.items() if v is not None}
     added["file_parameters"] = params

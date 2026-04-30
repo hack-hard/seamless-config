@@ -377,6 +377,64 @@ def test_queue_command_selects_existing_queue(monkeypatch, tmp_path):
     assert config["file_parameters"]["walltime"] == "00:20:00"
 
 
+def test_jobserver_launch_parameters_include_record_mode(monkeypatch, tmp_path):
+    _reset_state(monkeypatch)
+    _disable_remote_launch(monkeypatch)
+    workdir = tmp_path / "jobserver-record"
+    workdir.mkdir()
+    monkeypatch.setenv("HOME", str(tmp_path))
+    queues = {"default": _queue_defaults()}
+    _write_clusters_yaml(
+        tmp_path,
+        queues,
+        default_queue="default",
+        include_jobserver=True,
+        include_daskserver=False,
+    )
+    (workdir / "seamless.yaml").write_text(
+        "- cluster: demo\n- execution: remote\n- remote: jobserver\n"
+        "- record: true\n- project: demo\n",
+        encoding="utf-8",
+    )
+
+    seamless_config.set_workdir(workdir)
+    seamless_config.init()
+
+    import seamless_config.tools as tools
+
+    config = tools.configure_jobserver()
+    assert config["file_parameters"]["record"] is True
+
+
+def test_daskserver_launch_parameters_include_record_mode(monkeypatch, tmp_path):
+    _reset_state(monkeypatch)
+    _disable_remote_launch(monkeypatch)
+    workdir = tmp_path / "daskserver-record"
+    workdir.mkdir()
+    monkeypatch.setenv("HOME", str(tmp_path))
+    queues = {"default": _queue_defaults()}
+    _write_clusters_yaml(
+        tmp_path,
+        queues,
+        default_queue="default",
+        include_jobserver=False,
+        include_daskserver=True,
+    )
+    (workdir / "seamless.yaml").write_text(
+        "- cluster: demo\n- execution: remote\n- remote: daskserver\n"
+        "- record: true\n- project: demo\n",
+        encoding="utf-8",
+    )
+
+    seamless_config.set_workdir(workdir)
+    seamless_config.init()
+
+    import seamless_config.tools as tools
+
+    config = tools.configure_daskserver()
+    assert config["file_parameters"]["record"] is True
+
+
 def test_queue_command_requires_known_queue(monkeypatch, tmp_path):
     _reset_state(monkeypatch)
     _disable_remote_launch(monkeypatch)
