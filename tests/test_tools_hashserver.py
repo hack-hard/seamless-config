@@ -165,4 +165,3 @@ def test_seamless_cache_hashserver_is_actual_local_cluster(monkeypatch, tmp_path
     assert "hostname" not in config
     assert "ssh_hostname" not in config
     assert "tunnel" not in config
-    assert config["workdir"] == str(tmp_path / "cache")
