@@ -2,6 +2,8 @@ from copy import deepcopy
 from typing import Any
 import re
 
+from .select import PROJECT_TOPLEVEL
+
 _tools: dict[str, dict] = {}
 
 DOLLAR_RE = re.compile(r"\$[A-Za-z_][A-Za-z0-9_]*")
@@ -73,8 +75,8 @@ def _configure_tool(tool: str, *, added: dict[str, Any], injected: dict[str, Any
 def _build_injected(mode: str, cluster: str, project, subproject, stage, substage):
     assert isinstance(mode, str) and mode in ("ro", "rw"), mode
     injected = {"CLUSTER": cluster, "MODE": mode}
-    projectsubdir = "/" + project
-    if subproject is not None:
+    projectsubdir = "" if project == PROJECT_TOPLEVEL else "/" + project
+    if subproject is not None and projectsubdir:
         projectsubdir += "/" + subproject
     injected["PROJECTSUBDIR"] = projectsubdir
     stagedir = ""
