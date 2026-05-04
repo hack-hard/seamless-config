@@ -9,6 +9,7 @@ from ._dispatch import (
     cluster_ssh_hostname,
     iter_ndjson,
     row_matches_filters,
+    row_meta,
     run_local_capture,
     run_remote_capture,
     resolve,
@@ -43,13 +44,13 @@ def _table(rows):
 
 
 def _process_row(row):
-    meta = row.get("meta") if isinstance(row.get("meta"), dict) else {}
+    meta = row_meta(row)
     return {
         "service": meta.get("service"),
         "cluster": meta.get("cluster"),
         "project": meta.get("project"),
         "stage": meta.get("stage"),
-        "process": row.get("status"),
+        "process": row.get("status") or ("client" if row.get("port") is not None else None),
         "port": row.get("port"),
         "persistent": None,
         "size": None,

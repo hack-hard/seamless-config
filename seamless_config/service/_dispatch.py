@@ -238,8 +238,60 @@ def row_matches_cluster(row: dict[str, Any], cluster: str) -> bool:
     return any(key.startswith(prefix) for prefix in prefixes)
 
 
+def legacy_meta_from_key(key: object) -> dict[str, Any]:
+    if not isinstance(key, str):
+        return {}
+    for service in ("pure-daskserver", "hashserver", "database", "jobserver", "daskserver"):
+        prefix = f"{service}-"
+        if not key.startswith(prefix):
+            continue
+        rest = key[len(prefix):]
+        if service == "pure-daskserver":
+            parts = rest.rsplit("-", 1)
+            if len(parts) != 2:
+                return {"service": service}
+            return {"service": service, "cluster": parts[0], "queue": parts[1]}
+        for mode in ("rw", "ro"):
+            marker = f"-{mode}-"
+            if marker not in rest:
+                continue
+            cluster, tail = rest.split(marker, 1)
+            meta: dict[str, Any] = {
+                "service": service,
+                "cluster": cluster,
+                "mode": mode,
+            }
+            if tail:
+                components = tail.split("--")
+                project_parts = []
+                subproject_parts = []
+                for component in components:
+                    if component.startswith("STAGE-"):
+                        meta["stage"] = component[len("STAGE-"):]
+                    elif "stage" in meta:
+                        # Leave deeper stage/substage layouts blank rather than guessing.
+                        continue
+                    elif not project_parts:
+                        project_parts.append(component)
+                    else:
+                        subproject_parts.append(component)
+                if project_parts:
+                    meta["project"] = "/".join(project_parts)
+                if subproject_parts:
+                    meta["subproject"] = "/".join(subproject_parts)
+            return meta
+    return {}
+
+
+def row_meta(row: dict[str, Any]) -> dict[str, Any]:
+    meta = row.get("meta")
+    if isinstance(meta, dict) and meta:
+        return meta
+    return legacy_meta_from_key(row.get("key"))
+
+
 def row_matches_filters(row: dict[str, Any], args) -> bool:
-    meta = row.get("meta") if isinstance(row.get("meta"), dict) else {}
+    meta = row_meta(row)
     for name in ("service", "cluster", "project", "stage"):
         value = getattr(args, name, None)
         if value is not None and meta.get(name) != value:
