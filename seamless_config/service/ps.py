@@ -15,6 +15,9 @@ from ._dispatch import (
     resolve,
 )
 
+SEAMLESS_CACHE_CLUSTER = "__SEAMLESS_CACHE__"
+PROJECT_TOPLEVEL = "__TOPLEVEL__"
+
 
 def _emit_json(rows):
     for row in rows:
@@ -48,7 +51,7 @@ def _process_row(row):
     return {
         "service": meta.get("service"),
         "cluster": meta.get("cluster"),
-        "project": meta.get("project"),
+        "project": _display_project(meta.get("project"), meta.get("cluster")),
         "stage": meta.get("stage"),
         "process": row.get("status") or ("client" if row.get("port") is not None else None),
         "port": row.get("port"),
@@ -58,10 +61,17 @@ def _process_row(row):
     }
 
 
+def _display_project(project, cluster):
+    if project == PROJECT_TOPLEVEL and cluster == SEAMLESS_CACHE_CLUSTER:
+        return "SEAMLESS_CACHE"
+    return project
+
+
 def _persistent_row(row, service, cluster):
     name = row.get("path", "").rstrip("/").split("/")[-1]
     stage = name.removeprefix("STAGE-") if name.startswith("STAGE-") else None
     project = None if stage else name or None
+    project = _display_project(project, cluster)
     return {
         "service": service,
         "cluster": cluster,

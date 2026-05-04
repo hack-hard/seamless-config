@@ -294,7 +294,11 @@ def row_matches_filters(row: dict[str, Any], args) -> bool:
     meta = row_meta(row)
     for name in ("service", "cluster", "project", "stage"):
         value = getattr(args, name, None)
-        if value is not None and meta.get(name) != value:
+        actual = meta.get(name)
+        if name == "project" and value == "SEAMLESS_CACHE":
+            if actual == "__TOPLEVEL__" and meta.get("cluster") == "__SEAMLESS_CACHE__":
+                continue
+        if value is not None and actual != value:
             return False
     return True
 
