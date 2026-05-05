@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from ._args import make_parser
 from ._dispatch import run_remote, resolve
 
@@ -13,6 +15,8 @@ def main(argv=None) -> int:
     workdir = config.get("workdir")
     if not workdir or workdir == "/tmp":
         parser.error("service has no clearable persistent workdir")
+    if ssh_host is None:
+        workdir = os.path.expanduser(workdir)
     return run_remote(ssh_host, "rhl-clear", workdir).returncode
 
 

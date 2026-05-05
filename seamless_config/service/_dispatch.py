@@ -8,6 +8,130 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+PROJECT_ALIAS_SEAMLESS_CACHE = "SEAMLESS_CACHE"
+SEAMLESS_CACHE_CLUSTER = "__SEAMLESS_CACHE__"
+PROJECT_TOPLEVEL = "__TOPLEVEL__"
+
+
+def normalize_project_arg(project: str | None) -> str | None:
+    if project == PROJECT_ALIAS_SEAMLESS_CACHE:
+        return PROJECT_TOPLEVEL
+    return project
+
+
+def _is_seamless_cache_request(args) -> bool:
+    project = normalize_project_arg(getattr(args, "project", None))
+    cluster = getattr(args, "cluster", None)
+    return project == PROJECT_TOPLEVEL and cluster in (None, SEAMLESS_CACHE_CLUSTER)
+
+
+def _service_key_for_args(args) -> str | None:
+    return _service_key(getattr(args, "service", None), args)
+
+
+def _service_key(service: str | None, args) -> str | None:
+    mode = getattr(args, "mode", "rw")
+    if service not in {"hashserver", "database", "jobserver", "daskserver"}:
+        return None
+    key = f"{service}-{SEAMLESS_CACHE_CLUSTER}-{mode}-{PROJECT_TOPLEVEL}"
+    stage = getattr(args, "stage", None)
+    if stage:
+        key += f"--STAGE-{stage}"
+    substage = getattr(args, "substage", None)
+    if substage:
+        key += f"SUBSTAGE-{substage}"
+    return key
+
+
+def _service_json_keys_for_args(args) -> list[str]:
+    keys = []
+    primary = _service_key_for_args(args)
+    if primary is not None:
+        keys.append(primary)
+    hashserver = _service_key("hashserver", args)
+    if hashserver is not None and hashserver not in keys:
+        keys.append(hashserver)
+    return keys
+
+
+def _server_json_path(key: str) -> Path:
+    base = os.environ.get("REMOTE_HTTP_LAUNCHER_DIR", "~/.remote-http-launcher")
+    return Path(base).expanduser() / "server" / f"{key}.json"
+
+
+def _workdir_from_server_json(args) -> str | None:
+    for key in _service_json_keys_for_args(args):
+        path = _server_json_path(key)
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            continue
+        except (OSError, json.JSONDecodeError) as exc:
+            raise SystemExit(f"seamless-service: could not read {path}: {exc}") from exc
+        if not isinstance(data, dict):
+            raise SystemExit(f"seamless-service: state file must contain a JSON object: {path}")
+        workdir = data.get("workdir")
+        if isinstance(workdir, str) and workdir:
+            return workdir
+    return None
+
+
+def _seamless_cache_root_from_workdir(workdir: str, args) -> str:
+    path = Path(workdir).expanduser()
+    stage = getattr(args, "stage", None)
+    if stage:
+        stage_part = f"STAGE-{stage}"
+        if path.name == stage_part:
+            path = path.parent
+    if path.name == PROJECT_TOPLEVEL:
+        path = path.parent
+    return path.as_posix()
+
+
+def _seamless_cache_root(args) -> str | None:
+    workdir = _workdir_from_server_json(args)
+    if workdir:
+        return _seamless_cache_root_from_workdir(workdir, args)
+    value = os.environ.get("SEAMLESS_CACHE")
+    if value is None:
+        return None
+    value = value.strip()
+    if not value:
+        return None
+    return os.path.abspath(os.path.expanduser(value))
+
+
+def _define_seamless_cache_cluster(args) -> None:
+    from seamless_config.cluster import define_clusters
+    from seamless_config.config_files import load_tools
+    from seamless_config.select import select_cluster, select_execution, select_persistent, select_project
+
+    cache_dir = _seamless_cache_root(args)
+    if cache_dir is None:
+        raise SystemExit(
+            "seamless-service: --project SEAMLESS_CACHE requires an existing launcher JSON "
+            "with workdir, or SEAMLESS_CACHE to be set"
+        )
+    load_tools()
+    define_clusters(
+        {
+            "local_cluster": SEAMLESS_CACHE_CLUSTER,
+            SEAMLESS_CACHE_CLUSTER: {
+                "type": "local",
+                "frontends": [
+                    {
+                        "hashserver": {"bufferdir": cache_dir},
+                        "database": {"database_dir": cache_dir},
+                    }
+                ],
+            },
+        }
+    )
+    select_cluster(SEAMLESS_CACHE_CLUSTER)
+    select_project(PROJECT_TOPLEVEL)
+    select_execution("process")
+    select_persistent(True)
+
 
 @contextmanager
 def _temporary_workdir(workdir: str | None):
@@ -56,7 +180,7 @@ def _select_from_args(args) -> None:
     if getattr(args, "cluster", None) is not None:
         select.select_cluster(args.cluster)
     if getattr(args, "project", None) is not None:
-        select.select_project(args.project)
+        select.select_project(normalize_project_arg(args.project))
     if getattr(args, "subproject", None) is not None:
         select.select_subproject(args.subproject)
     if getattr(args, "stage", None) is not None:
@@ -72,8 +196,12 @@ def _select_from_args(args) -> None:
 
 def resolve(args, *, from_cwd=True):
     """Return (key, ssh_hostname, full_config)."""
-    _load_config(from_cwd=from_cwd, workdir=getattr(args, "workdir", None))
+    if _is_seamless_cache_request(args):
+        _define_seamless_cache_cluster(args)
+    else:
+        _load_config(from_cwd=from_cwd, workdir=getattr(args, "workdir", None))
     _select_from_args(args)
+    project = normalize_project_arg(args.project)
 
     from seamless_config.tools import (
         configure_database,
@@ -90,7 +218,7 @@ def resolve(args, *, from_cwd=True):
     if args.service == "hashserver":
         config = configure_hashserver(
             args.mode,
-            project=args.project,
+            project=project,
             subproject=args.subproject,
             stage=args.stage,
             **common,
@@ -98,14 +226,14 @@ def resolve(args, *, from_cwd=True):
     elif args.service == "database":
         config = configure_database(
             args.mode,
-            project=args.project,
+            project=project,
             subproject=args.subproject,
             stage=args.stage,
             **common,
         )
     elif args.service == "jobserver":
         config = configure_jobserver(
-            project=args.project,
+            project=project,
             subproject=args.subproject,
             stage=args.stage,
             substage=args.substage,
@@ -113,7 +241,7 @@ def resolve(args, *, from_cwd=True):
         )
     elif args.service == "daskserver":
         config = configure_daskserver(
-            project=args.project,
+            project=project,
             subproject=args.subproject,
             stage=args.stage,
             substage=args.substage,
@@ -142,17 +270,18 @@ def add_meta(config, args) -> dict:
     from seamless_config.select import get_current, get_queue
 
     service = args.service
+    project_arg = normalize_project_arg(args.project)
     try:
         cluster, project, subproject, stage, substage = get_current(
             args.cluster,
-            args.project,
+            project_arg,
             args.subproject,
             args.stage,
             args.substage,
         )
     except Exception:
         cluster = args.cluster
-        project = args.project
+        project = project_arg
         subproject = args.subproject
         stage = args.stage
         substage = args.substage
@@ -295,8 +424,8 @@ def row_matches_filters(row: dict[str, Any], args) -> bool:
     for name in ("service", "cluster", "project", "stage"):
         value = getattr(args, name, None)
         actual = meta.get(name)
-        if name == "project" and value == "SEAMLESS_CACHE":
-            if actual == "__TOPLEVEL__" and meta.get("cluster") == "__SEAMLESS_CACHE__":
+        if name == "project" and value == PROJECT_ALIAS_SEAMLESS_CACHE:
+            if actual == PROJECT_TOPLEVEL and meta.get("cluster") == "__SEAMLESS_CACHE__":
                 continue
         if value is not None and actual != value:
             return False
