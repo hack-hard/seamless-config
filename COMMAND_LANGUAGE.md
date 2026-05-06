@@ -33,6 +33,8 @@ an example (`- project: myproject`).
 | `queue` | string | Calls `seamless_config.select_queue(value)` |
 | `remote` | null or string (`daskserver`/`jobserver`) | Calls `seamless_config.select_remote(value)` |
 | `persistent` | boolean | Calls `seamless_config.select_persistent(value)` |
+| `record` | boolean | Calls `seamless_config.select_record(value)`. When `true`, successful executions persist a full execution record (environment fingerprints, compilation context, freshness, etc.) instead of the default minimal record. Invalidates the cached record-mode flag in the transformer runtime. |
+| `node` | string or null | Calls `seamless_config.select_node(value)`. Selects a named node within the active cluster (advanced: cluster-internal scheduling). |
 | `project` | string | Calls `seamless_config.select_project(value)` |
 | `subproject` | string | Calls `seamless_config.select_subproject(value)` |
 | `inherit_from_parent` | – | Also read commands from the parent directory and prepend them |
