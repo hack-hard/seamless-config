@@ -96,18 +96,20 @@ def set_remote_clients(
         else:
             url = entry.get("url")
             directory = entry.get("directory")
-        name = f"extern-buffer-{idx}"
-        if directory is not None and url is None:
+        if directory is not None:
+            name = f"extern-buffer-{idx}-folder" if url is not None else f"extern-buffer-{idx}"
             buffer_remote.define_extern_client(
                 name, "bufferfolder", directory=directory, readonly=True
             )
-        elif url is not None:
+            buffer_names.append(name)
+        if url is not None:
+            name = f"extern-buffer-{idx}-server" if directory is not None else f"extern-buffer-{idx}"
             buffer_remote.define_extern_client(
                 name, "hashserver", url=url, readonly=readonly
             )
-        else:
+            buffer_names.append(name)
+        if directory is None and url is None:
             raise ValueError("Buffer client entry requires 'url' or 'directory'")
-        buffer_names.append(name)
 
     buffer_remote.activate(no_main=True, extern_clients=buffer_names)
 

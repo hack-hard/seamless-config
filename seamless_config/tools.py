@@ -324,6 +324,7 @@ def configure_daskserver(
     params["walltime"] = queue.walltime
     params["exclusive"] = queue.exclusive
     params["cores"] = queue.cores
+    params["job_cores"] = queue.job_cores
     if queue.cores is None and clus.type == "local":
         params["cores"] = clus.workers
     params["memory"] = queue.memory

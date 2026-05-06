@@ -335,6 +335,30 @@ def test_configure_daskserver_injects_selected_node_for_slurm(monkeypatch, tmp_p
     assert "--nodelist=node123" in directives
 
 
+def test_configure_daskserver_propagates_job_cores_for_oar(monkeypatch, tmp_path):
+    _reset_state(monkeypatch)
+    workdir = tmp_path / "oar-job-cores"
+    workdir.mkdir()
+    monkeypatch.setenv("HOME", str(tmp_path))
+    queues = {"default": _queue_defaults() | {"cores": 24, "job_cores": 18}}
+    _write_clusters_yaml(tmp_path, queues, default_queue="default")
+    clusters_path = tmp_path / ".seamless" / "clusters.yaml"
+    cluster_def = yaml.safe_load(clusters_path.read_text(encoding="utf-8"))
+    cluster_def["demo"]["type"] = "oar"
+    cluster_def["demo"]["memory_per_core_property_name"] = "memcore"
+    clusters_path.write_text(yaml.safe_dump(cluster_def), encoding="utf-8")
+    seamless_config.set_workdir(workdir)
+    from seamless_config.config_files import load_config_files
+
+    load_config_files()
+    import seamless_config.tools as tools
+
+    config = tools.configure_daskserver(cluster="demo", project="demo")
+    params = config["file_parameters"]
+    assert params["cores"] == 24
+    assert params["job_cores"] == 18
+
+
 def test_remote_execution_requires_cluster(monkeypatch, tmp_path):
     _reset_state(monkeypatch)
     workdir = tmp_path / "remote-execution"
