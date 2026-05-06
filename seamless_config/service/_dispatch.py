@@ -315,15 +315,18 @@ def cluster_ssh_hostname(cluster_name: str, *, frontend_name: str | None = None)
     return frontend.ssh_hostname or frontend.hostname
 
 
+_RHL_PATH = "PATH=$HOME/miniforge3/bin:$HOME/miniconda3/bin:$PATH"
+
+
 def run_remote(ssh_hostname, *cmd):
     if ssh_hostname:
-        return subprocess.run(["ssh", ssh_hostname, *cmd])
+        return subprocess.run(["ssh", ssh_hostname, _RHL_PATH, *cmd])
     return run_local(*cmd)
 
 
 def run_remote_capture(ssh_hostname, *cmd) -> str:
     if ssh_hostname:
-        result = subprocess.run(["ssh", ssh_hostname, *cmd], text=True, capture_output=True)
+        result = subprocess.run(["ssh", ssh_hostname, _RHL_PATH, *cmd], text=True, capture_output=True)
     else:
         result = subprocess.run(list(cmd), text=True, capture_output=True)
     if result.returncode != 0:

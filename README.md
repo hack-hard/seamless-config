@@ -369,29 +369,20 @@ that cluster.
 
 ### Server-side requirements
 
-`seamless-service-*` always shells out to `rhl-*` helpers — there is **no
-inline fallback**. The `rhl-*` binaries must be reachable over SSH for
-non-interactive, non-login sessions on every frontend you target.
+`remote-http-launcher` must be installed on every remote server that
+`seamless-service-*` targets — it provides all `rhl-*` helpers. There is
+**no inline fallback** in the wrappers. Two supported install paths:
 
 - **System install** (with root): `pip install remote-http-launcher` into
-  the system Python; helpers land in `/usr/local/bin` and are picked up
-  for free.
-- **Conda base env install** (no root): install into the remote host's
-  conda base environment, then edit `~/.bashrc` so the conda activation
-  hook is reached on non-interactive shells. Many distributions ship a
-  guard like
-  ```bash
-  case $- in
-      *i*) ;;
-        *) return;;
-  esac
-  ```
-  near the top of `~/.bashrc` that returns early for non-interactive
-  shells, before the conda block runs. Comment those lines out (or move
-  them after the conda hook) so `ssh host rhl-ps` finds the helper.
-- **Use `rhl-guard`**: when the SSH key in `authorized_keys` is gated
-  by `command="rhl-guard …"`, the guard locates and exec's the helpers
-  itself; the `.bashrc` edit is unnecessary.
+  the system Python; helpers land in `/usr/local/bin`.
+- **Conda base env install** (no root): `pip install remote-http-launcher`
+  into the remote host's conda base environment; helpers land in
+  `$HOME/miniforge3/bin` or `$HOME/miniconda3/bin`.
+
+No `.bashrc` edit is required for either path. `seamless-service-*`
+automatically prepends `$HOME/miniforge3/bin:$HOME/miniconda3/bin` to
+PATH on every SSH call, so conda-base installs work without any shell
+startup changes.
 
 Note: `remote-http-launcher` itself has its own fallback — it can probe
 conda configuration via inline heredocs when no `rhl-*` helpers are
