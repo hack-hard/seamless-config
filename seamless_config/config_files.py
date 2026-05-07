@@ -4,6 +4,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterable, Sequence
+from platformdirs import PlatformDirs
 
 import yaml  # type: ignore
 
@@ -176,6 +177,32 @@ COMMAND_SPECS: dict[str, CommandSpec] = {
 }
 
 
+def get_seamless_config_paths():
+    app_name = "seamless"
+
+    # 1. Setup Locations
+    legacy_root = Path.home() / ".seamless"
+    dirs = PlatformDirs(appname=app_name, appauthor="SeamlessProjects")
+
+    # 2. Determine the Base Config Directory
+    # We check for the legacy folder first to avoid breaking existing setups
+    if legacy_root.exists():
+        config_base = legacy_root
+    else:
+        config_base = Path(dirs.user_config_dir)
+
+    # 3. Define the specific config artifacts
+    # Both the master file and the folder are treated as "Config"
+    clusters_yaml = config_base / "clusters.yaml"
+    clusters_folder = config_base / "clusters"
+
+    # 4. "Good Manner" Creation
+    # Ensure the parent config folder and the clusters subfolder exist
+    clusters_folder.mkdir(parents=True, exist_ok=True)
+
+    return clusters_yaml, clusters_folder
+
+
 def _load_clusters() -> dict[str, Any]:
     """
     Load cluster definitions from $HOME/.seamless/clusters.yaml
@@ -183,13 +210,13 @@ def _load_clusters() -> dict[str, Any]:
     """
     global _clusters
     home_dir = os.environ.get("HOME") or str(Path.home())
-    clusters_path_yaml = Path(home_dir) / ".seamless" / "clusters.yaml"
-    clusters_pathdir = Path(home_dir) / ".seamless" / "clusters"
+    clusters_path_yaml, clusters_pathdir = get_seamless_config_paths()
     sub_yamls = clusters_pathdir.glob("*.yaml")
     data: Any = {}
     for clusters_path in [clusters_path_yaml] + list(sub_yamls):
         if clusters_path.is_file():
             with clusters_path.open("r", encoding="utf-8") as handle:
+                # dates have noe business being in a config file
                 data.update(yaml.safe_load(handle))
     if data is None:
         data = {}
@@ -247,7 +274,7 @@ def _load_seamless_cache_config() -> bool:
                     "database": {"database_dir": cache_dir},
                 }
             ],
-        }
+        },
     }
     register_clusters(synthetic_clusters)
     select_cluster(SEAMLESS_CACHE_CLUSTER)
