@@ -237,12 +237,13 @@ local:
 """
 
 
-def _create_default_config(config_base: Path) -> None:
+_PLATFORM_DIRS = PlatformDirs(appname="seamless", appauthor="sjdv1982")
+
+
+def _create_default_config(config_base: Path, bufferdir: Path, database_dir: Path) -> None:
     clusters_file = config_base / "clusters.yaml"
     if clusters_file.exists():
         return
-    bufferdir = config_base / "buffer"
-    database_dir = config_base / "database"
     bufferdir.mkdir(parents=True, exist_ok=True)
     database_dir.mkdir(parents=True, exist_ok=True)
     clusters_file.write_text(
@@ -254,31 +255,26 @@ def _create_default_config(config_base: Path) -> None:
     )
 
 
-def get_seamless_config_paths():
-    app_name = "seamless"
+def _init_config_dir(path: Path) -> Path:
+    if not path.exists():
+        path.mkdir(parents=True, exist_ok=True)
+        _create_default_config(
+            path,
+            Path(_PLATFORM_DIRS.user_cache_dir),
+            Path(_PLATFORM_DIRS.user_data_dir),
+        )
+    return path
 
-    env_override = os.environ.get("SEAMLESS_CONFIG_DIR")
-    if env_override:
-        config_base = Path(env_override)
-        is_new = not config_base.exists()
-        config_base.mkdir(parents=True, exist_ok=True)
-        if is_new:
-            _create_default_config(config_base)
-        return config_base
+
+def get_seamless_config_paths() -> Path:
+    if env_override := os.environ.get("SEAMLESS_CONFIG_DIR"):
+        return _init_config_dir(Path(env_override))
 
     legacy_root = Path.home() / ".seamless"
-    dirs = PlatformDirs(appname=app_name, appauthor="sjdv1982")
-
     if legacy_root.exists():
-        config_base = legacy_root
-    else:
-        config_base = Path(dirs.user_config_dir)
-        is_new = not config_base.exists()
-        config_base.mkdir(parents=True, exist_ok=True)
-        if is_new:
-            _create_default_config(config_base)
+        return legacy_root
 
-    return config_base
+    return _init_config_dir(Path(_PLATFORM_DIRS.user_config_dir))
 
 
 def _load_clusters() -> dict[str, Any]:

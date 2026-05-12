@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from seamless_config.config_files import get_seamless_config_paths
+from seamless_config.config_files import _PLATFORM_DIRS, get_seamless_config_paths
 
 
 @pytest.fixture(autouse=True)
@@ -14,6 +14,8 @@ def isolated_home(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.delenv("SEAMLESS_CONFIG_DIR", raising=False)
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
     return home
 
 
@@ -74,18 +76,18 @@ def test_default_config_has_local_cluster():
     assert data["local"]["type"] == "local"
 
 
-def test_default_config_paths_inside_config_dir():
+def test_default_config_paths_use_xdg_dirs():
     result = get_seamless_config_paths()
     data = yaml.safe_load((result / "clusters.yaml").read_text(encoding="utf-8"))
     frontend = data["local"]["frontends"][0]
-    assert Path(frontend["hashserver"]["bufferdir"]) == result / "buffer"
-    assert Path(frontend["database"]["database_dir"]) == result / "database"
+    assert Path(frontend["hashserver"]["bufferdir"]) == Path(_PLATFORM_DIRS.user_cache_dir)
+    assert Path(frontend["database"]["database_dir"]) == Path(_PLATFORM_DIRS.user_data_dir)
 
 
-def test_default_config_subdirs_created():
-    result = get_seamless_config_paths()
-    assert (result / "buffer").is_dir()
-    assert (result / "database").is_dir()
+def test_default_config_xdg_subdirs_created():
+    get_seamless_config_paths()
+    assert Path(_PLATFORM_DIRS.user_cache_dir).is_dir()
+    assert Path(_PLATFORM_DIRS.user_data_dir).is_dir()
 
 
 def test_default_config_not_created_for_existing_dir():
