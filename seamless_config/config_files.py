@@ -177,40 +177,120 @@ COMMAND_SPECS: dict[str, CommandSpec] = {
 }
 
 
+_DEFAULT_CLUSTERS_YAML = """\
+# Seamless cluster configuration
+# 'local_cluster' is an alias that points to the active local cluster name.
+local_cluster: local
+
+local:
+  type: local
+  frontends:
+    - hashserver:
+        bufferdir: {bufferdir}
+      database:
+        database_dir: {database_dir}
+
+# --- Example: remote Slurm cluster ---
+# Uncomment and fill in to enable a remote HPC cluster.
+#
+# local_cluster: mycluster   # make mycluster the default local cluster
+#
+# mycluster:
+#   tunnel: true              # connect via SSH tunnel
+#   type: slurm               # local | slurm | oar
+#   workers: 4                # number of workers for spawn/jobserver mode
+#   frontends:
+#     - hostname: login.mycluster.example
+#       ssh_hostname: login.mycluster.example   # optional SSH override
+#       hashserver:
+#         bufferdir: /scratch/seamless/buffers
+#         conda: hashserver
+#         network_interface: 0.0.0.0
+#         port_start: 60100
+#         port_end: 60199
+#       database:
+#         database_dir: /scratch/seamless/db
+#         conda: seamless-database
+#         network_interface: 0.0.0.0
+#         port_start: 60200
+#         port_end: 60299
+#       daskserver:
+#         network_interface: 0.0.0.0
+#         port_start: 60300
+#         port_end: 60399
+#   default_queue: default
+#   queues:
+#     default:
+#       conda: seamless-dask
+#       walltime: "01:00:00"
+#       cores: 16
+#       memory: 32000MB
+#       tmpdir: /tmp
+#       maximum_jobs: 20
+#       unknown_task_duration: 1m
+#       target_duration: 10m
+#       lifetime_stagger: 4m
+#     highmem:
+#       TEMPLATE: default     # inherit all fields from 'default', then override
+#       cores: 4
+#       memory: 128000MB
+"""
+
+
+def _create_default_config(config_base: Path) -> None:
+    clusters_file = config_base / "clusters.yaml"
+    if clusters_file.exists():
+        return
+    bufferdir = config_base / "buffer"
+    database_dir = config_base / "database"
+    bufferdir.mkdir(parents=True, exist_ok=True)
+    database_dir.mkdir(parents=True, exist_ok=True)
+    clusters_file.write_text(
+        _DEFAULT_CLUSTERS_YAML.format(
+            bufferdir=bufferdir,
+            database_dir=database_dir,
+        ),
+        encoding="utf-8",
+    )
+
+
 def get_seamless_config_paths():
     app_name = "seamless"
 
-    # 1. Setup Locations
-    legacy_root = Path.home() / ".seamless"
-    dirs = PlatformDirs(appname=app_name, appauthor="SeamlessProjects")
+    env_override = os.environ.get("SEAMLESS_CONFIG_DIR")
+    if env_override:
+        config_base = Path(env_override)
+        is_new = not config_base.exists()
+        config_base.mkdir(parents=True, exist_ok=True)
+        if is_new:
+            _create_default_config(config_base)
+        return config_base
 
-    # 2. Determine the Base Config Directory
-    # We check for the legacy folder first to avoid breaking existing setups
+    legacy_root = Path.home() / ".seamless"
+    dirs = PlatformDirs(appname=app_name, appauthor="sjdv1982")
+
     if legacy_root.exists():
         config_base = legacy_root
     else:
         config_base = Path(dirs.user_config_dir)
+        is_new = not config_base.exists()
+        config_base.mkdir(parents=True, exist_ok=True)
+        if is_new:
+            _create_default_config(config_base)
 
-    # 3. Define the specific config artifacts
-    # Both the master file and the folder are treated as "Config"
-    clusters_yaml = config_base / "clusters.yaml"
-    clusters_folder = config_base / "clusters"
-
-    # 4. "Good Manner" Creation
-    # Ensure the parent config folder and the clusters subfolder exist
-    clusters_folder.mkdir(parents=True, exist_ok=True)
-
-    return clusters_yaml, clusters_folder
+    return config_base
 
 
 def _load_clusters() -> dict[str, Any]:
     """
-    Load cluster definitions from $HOME/.seamless/clusters.yaml
-    and $HOME/.seamless/clusters/*.yaml and into _clusters.
+    Load cluster definitions from $HXDG_CONFIG_HOME/seamless/clusters.yaml
+    and $HXDG_CONFIG_HOME/seamless/clusters/*.yaml and into _clusters.
     """
     global _clusters
-    home_dir = os.environ.get("HOME") or str(Path.home())
-    clusters_path_yaml, clusters_pathdir = get_seamless_config_paths()
+    # home_dir = os.environ.get("HOME") or str(Path.home())
+    config_dir = get_seamless_config_paths()
+    clusters_path_yaml = config_dir / "clusters.yaml"
+    clusters_pathdir = config_dir / "clusters"
     sub_yamls = clusters_pathdir.glob("*.yaml")
     data: Any = {}
     for clusters_path in [clusters_path_yaml] + list(sub_yamls):
@@ -221,9 +301,7 @@ def _load_clusters() -> dict[str, Any]:
     if data is None:
         data = {}
     if not isinstance(data, dict):
-        raise ValueError(
-            f"{clusters_path}: expected a mapping with cluster definitions"
-        )
+        raise ValueError(f"{config_dir}: expected a mapping with cluster definitions")
     _clusters = data
     return _clusters
 
