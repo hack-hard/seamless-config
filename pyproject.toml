@@ -12,6 +12,7 @@ license = "MIT"
 authors = [{name = "Sjoerd de Vries"}]
 dependencies = [
     "PyYAML",
+    "platformdirs",
     "remote-http-launcher",
     "seamless-core",
     "seamless-remote",
@@ -40,6 +41,7 @@ seamless_config = ["tools.yaml"]
 script-files = ["bin/seamless-init"]
 
 [project.scripts]
+seamless-config-create = "seamless_config.config_files:create_config"
 seamless-service-resolve = "seamless_config.service.resolve:main"
 seamless-service-ps = "seamless_config.service.ps:main"
 seamless-service-stop = "seamless_config.service.stop:main"

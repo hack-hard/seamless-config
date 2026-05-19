@@ -125,8 +125,10 @@ Use a `stage <name>:` key to activate commands only in a specific stage:
 
 ## Cluster definitions
 
-Clusters are defined in `~/.seamless/clusters.yaml` and/or individual files
-under `~/.seamless/clusters/*.yaml`. They can also be inlined in
+Clusters are defined in `$XDG_CONFIG_HOME/seamless/clusters.yaml` (typically
+`~/.config/seamless/clusters.yaml` on Linux) and/or individual files under
+`clusters/`. Run `seamless-config-create` to initialise the config directory
+with a default local-only cluster. They can also be inlined in
 `seamless.profile.yaml` via the `clusters` command (useful for portable
 projects).
 
@@ -134,7 +136,7 @@ A cluster definition describes the *topology* of its frontend nodes and the
 services each one can host:
 
 ```yaml
-# ~/.seamless/clusters.yaml
+# ~/.config/seamless/clusters.yaml
 
 mycluster:
   tunnel: true                # connect via SSH tunnel

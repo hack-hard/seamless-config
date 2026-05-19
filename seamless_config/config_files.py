@@ -242,8 +242,6 @@ _PLATFORM_DIRS = PlatformDirs(appname="seamless", appauthor="sjdv1982")
 
 def _create_default_config(config_base: Path, bufferdir: Path, database_dir: Path) -> None:
     clusters_file = config_base / "clusters.yaml"
-    if clusters_file.exists():
-        return
     bufferdir.mkdir(parents=True, exist_ok=True)
     database_dir.mkdir(parents=True, exist_ok=True)
     clusters_file.write_text(
@@ -255,47 +253,105 @@ def _create_default_config(config_base: Path, bufferdir: Path, database_dir: Pat
     )
 
 
-def _init_config_dir(path: Path) -> Path:
-    if not path.exists():
-        path.mkdir(parents=True, exist_ok=True)
-        _create_default_config(
-            path,
-            Path(_PLATFORM_DIRS.user_cache_dir),
-            Path(_PLATFORM_DIRS.user_data_dir),
-        )
-    return path
+def _has_cluster_config(directory: Path) -> bool:
+    return (directory / "clusters.yaml").is_file() or any(
+        (directory / "clusters").glob("*.yaml")
+    )
 
 
-def get_seamless_config_paths() -> Path:
+def get_seamless_config_paths() -> Path | None:
+    import warnings
+
     if env_override := os.environ.get("SEAMLESS_CONFIG_DIR"):
-        return _init_config_dir(Path(env_override))
+        config_dir = Path(env_override)
+        if not config_dir.exists():
+            raise FileNotFoundError(
+                f"SEAMLESS_CONFIG_DIR does not exist: {config_dir}"
+            )
+        if not _has_cluster_config(config_dir):
+            raise FileNotFoundError(
+                f"No cluster config found in SEAMLESS_CONFIG_DIR: {config_dir}"
+            )
+        return config_dir
 
-    legacy_root = Path.home() / ".seamless"
-    if legacy_root.exists():
-        return legacy_root
+    legacy_dir = Path.home() / ".seamless"
+    platform_dir = Path(_PLATFORM_DIRS.user_config_dir)
 
-    return _init_config_dir(Path(_PLATFORM_DIRS.user_config_dir))
+    legacy_has = _has_cluster_config(legacy_dir)
+    platform_has = _has_cluster_config(platform_dir)
+
+    if legacy_has and platform_has:
+        raise ValueError(
+            f"Conflicting cluster configs found in both '{legacy_dir}' and "
+            f"'{platform_dir}'. Remove one or set SEAMLESS_CONFIG_DIR."
+        )
+
+    if platform_has:
+        return platform_dir
+
+    if legacy_has:
+        warnings.warn(
+            f"~/.seamless is deprecated as the config location. "
+            f"Migrate your config to '{platform_dir}' and run 'seamless-config-create'.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return legacy_dir
+
+    warnings.warn(
+        f"No global Seamless cluster config found in '{platform_dir}'. "
+        "Cluster definitions must be provided inline. "
+        "Run 'seamless-config-create' to create a default config.",
+        UserWarning,
+        stacklevel=2,
+    )
+    return None
+
+
+def create_config() -> None:
+    """Create a default Seamless config in the platform config directory."""
+    legacy_dir = Path.home() / ".seamless"
+    platform_dir = Path(_PLATFORM_DIRS.user_config_dir)
+    env_override = os.environ.get("SEAMLESS_CONFIG_DIR")
+
+    locations_to_check = (
+        [Path(env_override)] if env_override else []
+    ) + [legacy_dir, platform_dir]
+
+    for loc in locations_to_check:
+        if _has_cluster_config(loc):
+            raise FileExistsError(
+                f"Existing cluster config found in '{loc}'. Remove it first."
+            )
+
+    config_dir = Path(env_override) if env_override else platform_dir
+    config_dir.mkdir(parents=True, exist_ok=True)
+    _create_default_config(
+        config_dir,
+        Path(_PLATFORM_DIRS.user_cache_dir),
+        Path(_PLATFORM_DIRS.user_data_dir),
+    )
+    print(f"Created default Seamless config in '{config_dir}'.")
 
 
 def _load_clusters() -> dict[str, Any]:
     """
-    Load cluster definitions from $HXDG_CONFIG_HOME/seamless/clusters.yaml
-    and $HXDG_CONFIG_HOME/seamless/clusters/*.yaml and into _clusters.
+    Load cluster definitions from $XDG_CONFIG_HOME/seamless/clusters.yaml
+    and $XDG_CONFIG_HOME/seamless/clusters/*.yaml into _clusters.
     """
     global _clusters
-    # home_dir = os.environ.get("HOME") or str(Path.home())
     config_dir = get_seamless_config_paths()
+    if config_dir is None:
+        _clusters = {}
+        return _clusters
     clusters_path_yaml = config_dir / "clusters.yaml"
     clusters_pathdir = config_dir / "clusters"
     sub_yamls = clusters_pathdir.glob("*.yaml")
-    data: Any = {}
+    data: dict[str, Any] = {}
     for clusters_path in [clusters_path_yaml] + list(sub_yamls):
         if clusters_path.is_file():
             with clusters_path.open("r", encoding="utf-8") as handle:
-                # dates have noe business being in a config file
-                data.update(yaml.safe_load(handle))
-    if data is None:
-        data = {}
+                data.update(yaml.safe_load(handle) or {})
     if not isinstance(data, dict):
         raise ValueError(f"{config_dir}: expected a mapping with cluster definitions")
     _clusters = data
